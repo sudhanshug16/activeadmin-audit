@@ -41,7 +41,7 @@ module ActiveAdmin
 
             # Will save new version of the object
             after_commit do
-              if paper_trail.enabled?
+              if PaperTrail.request.enabled?
                 if @event_for_paper_trail
                   generate_version!
                 end
@@ -52,7 +52,7 @@ module ActiveAdmin
 
             if options_on.include?(:create)
               after_create do
-                if paper_trail.enabled?
+                if PaperTrail.request.enabled?
                   @event_for_paper_trail = 'create'
                 end
               end
@@ -61,7 +61,7 @@ module ActiveAdmin
             if options_on.include?(:update)
               # Cache object changes to access it from after_commit
               after_update do
-                if paper_trail.enabled?
+                if PaperTrail.request.enabled?
                   @event_for_paper_trail = 'update'
                   cache_version_object_changes
                 end
@@ -71,7 +71,7 @@ module ActiveAdmin
             if options_on.include?(:destroy)
               # Cache all details to access it from after_commit
               before_destroy do
-                if paper_trail.enabled?
+                if PaperTrail.request.enabled?
                   @event_for_paper_trail = 'destroy'
                   cache_version_object
                   cache_version_object_changes
