@@ -1,3 +1,8 @@
+# ⚠️ Personal Fork Notice ⚠️
+
+This is a personal fork of the original `activeadmin-audit` gem. Use it at your own risk! The original repository can be found [here](https://github.com/holyketzer/activeadmin-audit).
+
+
 [![Gem Version](https://badge.fury.io/rb/activeadmin-audit.svg)](https://badge.fury.io/rb/activeadmin-audit)
 [![Build Status](https://travis-ci.org/holyketzer/activeadmin-audit.svg?branch=master)](https://travis-ci.org/holyketzer/activeadmin-audit)
 [![Code Climate](https://codeclimate.com/github/holyketzer/activeadmin-audit/badges/gpa.svg)](https://codeclimate.com/github/holyketzer/activeadmin-audit)
