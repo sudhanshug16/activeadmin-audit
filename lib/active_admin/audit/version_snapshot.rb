@@ -7,6 +7,8 @@ module ActiveAdmin
 
       def self.load(string)
         self[JSON.parse(string || '{}')]
+      rescue
+        self[JSON.parse('{}')]
       end
 
       def diff(other_snapshot)
@@ -39,7 +41,7 @@ module ActiveAdmin
             elsif values.is_a? Hash
               # hash with diff in '+'/'-'
               values.each do |k, items|
-                values[k] = items.map { |value| materialize_item(klass, attr, value) }
+                values[k] = items.is_a?(Hash) ? items.map { |value| materialize_item(klass, attr, value) } : materialize_item(klass, attr, items)
               end
             else
               # any values

@@ -22,6 +22,7 @@ Gem::Specification.new do |spec|
   spec.add_dependency 'activeadmin', '>= 1.0.0'
   spec.add_dependency 'paper_trail', '>= 5.2.3'
   spec.add_dependency 'rails', '>= 4.0.0'
+  spec.add_dependency 'slim-rails'
 
   spec.add_development_dependency 'appraisal', '2.1.0'
   spec.add_development_dependency 'bundler', '~> 1.12'

@@ -5,6 +5,8 @@ module ActiveAdmin
     module HasVersions
       extend ActiveSupport::Concern
 
+      RAILS_GTE_5_1 = ::ActiveRecord.gem_version >= ::Gem::Version.new("5.1.0.beta1")
+
       module ClassMethods
         def has_versions(options = {})
           options[:also_include] ||= {}
@@ -14,7 +16,7 @@ module ActiveAdmin
             options[:skip] += translated_attrs.map { |attr| "#{attr}_translations" }
           end
 
-          has_paper_trail options.merge(on: [], class_name: 'ActiveAdmin::Audit::ContentVersion', meta: {
+          has_paper_trail options.merge( on: [], versions: { class_name: "ActiveAdmin::Audit::ContentVersion" }, meta: {
             additional_objects: ->(record) { record.additional_objects_snapshot.to_json },
             additional_objects_changes: ->(record) { record.additional_objects_snapshot_changes.to_json },
           })
@@ -86,7 +88,7 @@ module ActiveAdmin
       end
 
       def additional_objects_snapshot_changes
-        prev_version = versions.last
+        prev_version = (versions.size > 0) ? versions.last : latest_versions.first
 
         old_snapshot = prev_version.try(:additional_objects) || VersionSnapshot.new
         new_snapshot = additional_objects_snapshot
@@ -96,16 +98,66 @@ module ActiveAdmin
 
       private
 
+      def attribute_in_previous_version(record, attr_name, is_touch)
+        if !is_touch
+          # For most events, we want the original value of the attribute, before
+          # the last save.
+          record.attribute_before_last_save(attr_name.to_s)
+        else
+          # We are either performing a `record_destroy` or a
+          # `record_update(is_touch: true)`.
+          record.attribute_in_database(attr_name.to_s)
+        end
+      end
+
       def cache_version_object
-        @version_object_cache ||= paper_trail.object_attrs_for_paper_trail
+        if paper_trail.respond_to?(:object_attrs_for_paper_trail)
+          @version_object_cache ||= paper_trail.object_attrs_for_paper_trail(false)
+        else
+          @record = paper_trail.instance_variable_get(:@record)
+          record_attributes = @record.attributes.except(*@record.paper_trail_options[:skip].map(&:to_s))
+          record_attributes.each_key do |k|
+            if @record.class.column_names.include?(k)
+              record_attributes[k] = attribute_in_previous_version(@record, k, false)
+            end
+          end
+          @version_object_cache ||= record_attributes
+        end
       end
 
       def cache_version_object_changes
-        @version_object_changes_cache ||= paper_trail.changes
+        record = paper_trail.instance_variable_get(:@record)
+        @version_object_changes_cache ||= (RAILS_GTE_5_1 ? record.saved_changes : record.changes).except(*record.paper_trail_options[:skip].map(&:to_s))
       end
 
       def cache_version_additional_objects_and_changes
-        @version_additional_objects_and_changes_cache ||= paper_trail.merge_metadata_into({})
+        if paper_trail.respond_to?(:merge_metadata_into)
+          @version_additional_objects_and_changes_cache ||= paper_trail.merge_metadata_into({})
+        else
+          data ={}
+          @record = paper_trail.instance_variable_get(:@record)
+          @record.paper_trail_options[:meta].each do |k, v|
+            data[k] = if v.respond_to?(:call)
+              v.call(@record)
+            elsif v.is_a?(Symbol) && @record.respond_to?(v, true)
+              if data[:event] != "create" &&
+                  @record.has_attribute?(v) &&
+                  (RAILS_GTE_5_1 ? @record.saved_change_to_attribute?(v.to_s) : @record.attribute_changed?(v.to_s))
+                if RAILS_GTE_5_1
+                  @record.attribute_before_last_save(v.to_s)
+                else
+                  @record.attribute_in_database(v.to_s)
+                end
+              else
+                @record.send(v)
+              end
+            else
+              v
+            end
+          end
+          data.merge!(PaperTrail.request.controller_info || {})
+          @version_additional_objects_and_changes_cache ||= data
+        end
       end
 
       def clear_version_cache
@@ -115,16 +167,18 @@ module ActiveAdmin
       end
 
       def generate_version!
-        data = {
-          event: @event_for_paper_trail,
-          object: cache_version_object.to_json,
-          object_changes: cache_version_object_changes.to_json,
-          whodunnit: PaperTrail.whodunnit.try(:id),
-          item_type: self.class.name,
-          item_id: id,
-        }
+        if cache_version_object_changes.size > 0 or cache_version_additional_objects_and_changes.size > 0
+          data = {
+            event: @event_for_paper_trail,
+            object: cache_version_object.to_json,
+            object_changes: cache_version_object_changes.to_json,
+            whodunnit: PaperTrail.request.whodunnit,
+            item_type: self.class.name,
+            item_id: id,
+          }
 
-        PaperTrail::Version.create! data.merge!(cache_version_additional_objects_and_changes)
+          PaperTrail::Version.create! data.merge!(cache_version_additional_objects_and_changes)
+        end
 
         clear_version_cache
       end
