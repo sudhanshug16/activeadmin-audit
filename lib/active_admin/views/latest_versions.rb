@@ -1,8 +1,8 @@
 module ActiveAdmin
   module Views
-    include ActiveAdmin::VersionsHelper
-
     class LatestVersions < ActiveAdmin::Component
+      include ActiveAdmin::ViewHelpers
+
       builder_method :latest_versions
 
       def build(resource, _attributes = {})
