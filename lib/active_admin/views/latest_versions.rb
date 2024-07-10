@@ -1,5 +1,7 @@
 module ActiveAdmin
   module Views
+    include ActiveAdmin::VersionsHelper
+
     class LatestVersions < ActiveAdmin::Component
       builder_method :latest_versions
 
