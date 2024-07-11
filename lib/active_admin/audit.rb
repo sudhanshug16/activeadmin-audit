@@ -7,7 +7,7 @@ require 'active_admin/audit/has_versions'
 require 'active_admin/audit/version_snapshot'
 require 'active_admin/views/latest_versions'
 require 'active_admin/versions_helper'
-
+require 'paper_trail/serializers/json'
 module ActiveAdmin
   module Audit
     class << self
