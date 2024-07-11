@@ -53,7 +53,8 @@ module ActiveAdmin
       private
 
       def materialize_item(klass, attr, value)
-        if (association = klass.reflect_on_all_associations.find { |a| [a.foreign_key, a.plural_name, a.name.to_s].include?(attr) })
+        association = klass.reflect_on_all_associations.find { |a| [a.foreign_key, a.plural_name, a.name.to_s].include?(attr) }
+        if association.present? && association.options[:polymorphic].blank?
           # attr is association in klass
           if value.is_a?(Hash)
             if value.size == 1 && value.keys.first.to_s == association.klass.primary_key.to_s
@@ -69,13 +70,21 @@ module ActiveAdmin
             # belongs_to
             materialize_record_value(association.klass, value)
           end
+        elsif association.present? && value.present?
+          # attr is polymorphic association
+          index = self[attr].find_index { |v| v == value }
+          materialize_record_value(self["#{attr.gsub('_id', '')}_type"][index].constantize, value)
         else
           value
         end
       end
 
       def materialize_record_value(klass, value)
-        klass.find_by(id: value) || "#{klass} ##{value} was removed"
+        if value.is_a?(Hash)
+          klass.find_by(id: value[klass.primary_key]) || "#{klass} ##{value[klass.primary_key]} was removed"
+        else
+          klass.find_by(id: value) || "#{klass} ##{value} was removed"
+        end
       end
     end
   end

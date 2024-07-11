@@ -17,9 +17,11 @@ module ActiveAdmin
           end
 
           has_paper_trail options.merge( on: [], versions: { class_name: "ActiveAdmin::Audit::ContentVersion" }, meta: {
-            additional_objects: ->(record) { record.additional_objects_snapshot.to_json },
-            additional_objects_changes: ->(record) { record.additional_objects_snapshot_changes.to_json },
+            additional_objects: ->(record) { record.additional_objects_snapshot.presence&.to_json },
+            additional_objects_changes: ->(record) { record.additional_objects_snapshot_changes.presence&.to_json },
           })
+
+          condition_proc = proc { |record| (options[:if] || proc { |_r| true }).call(record) && !(options[:unless] || proc { |_r| false }).call(record) }
 
           class_eval do
             define_method(:additional_objects_snapshot) do
@@ -41,7 +43,7 @@ module ActiveAdmin
 
             # Will save new version of the object
             after_commit do
-              if PaperTrail.request.enabled?
+              if PaperTrail.request.enabled? && condition_proc.call(self)
                 if @event_for_paper_trail
                   generate_version!
                 end
@@ -52,7 +54,7 @@ module ActiveAdmin
 
             if options_on.include?(:create)
               after_create do
-                if PaperTrail.request.enabled?
+                if PaperTrail.request.enabled? && condition_proc.call(self)
                   @event_for_paper_trail = 'create'
                 end
               end
@@ -61,7 +63,7 @@ module ActiveAdmin
             if options_on.include?(:update)
               # Cache object changes to access it from after_commit
               after_update do
-                if PaperTrail.request.enabled?
+                if PaperTrail.request.enabled? && condition_proc.call(self)
                   @event_for_paper_trail = 'update'
                   cache_version_object_changes
                 end
@@ -71,7 +73,7 @@ module ActiveAdmin
             if options_on.include?(:destroy)
               # Cache all details to access it from after_commit
               before_destroy do
-                if PaperTrail.request.enabled?
+                if PaperTrail.request.enabled? && condition_proc.call(self)
                   @event_for_paper_trail = 'destroy'
                   cache_version_object
                   cache_version_object_changes
@@ -81,6 +83,14 @@ module ActiveAdmin
             end
           end
         end
+      end
+
+      def deep_versions
+        conditions = deep_versions_conditions
+        conditions = "OR #{conditions}" if conditions.present?
+        ActiveAdmin::Audit::ContentVersion
+          .where("(item_type = ? AND item_id = ?) #{conditions}", self.class.name, self.id)
+          .order(created_at: :desc)
       end
 
       def latest_versions(count = 5)
@@ -97,6 +107,24 @@ module ActiveAdmin
       end
 
       private
+
+      def deep_versions_conditions
+        association_classes_and_ids = self.class
+                                          .reflect_on_all_associations
+                                          .each_with_object([]) do |assoc, arr|
+                                            if assoc.collection?
+                                              Array(self.send(assoc.name).pluck(:id)).each do |record_id|
+                                                arr << { item_type: assoc.class_name, item_id: record_id }
+                                              end
+                                            else
+                                              record = self.send(assoc.name)
+                                              arr << { item_type: assoc.class_name, item_id: record.id } if record
+                                            end
+                                          end
+        association_classes_and_ids.map do |assoc|
+          "(item_type = '#{assoc[:item_type]}' AND item_id = #{assoc[:item_id]})"
+        end.join(' OR ')
+      end
 
       def attribute_in_previous_version(record, attr_name, is_touch)
         if !is_touch
@@ -127,12 +155,12 @@ module ActiveAdmin
 
       def cache_version_object_changes
         record = paper_trail.instance_variable_get(:@record)
-        @version_object_changes_cache ||= (RAILS_GTE_5_1 ? record.saved_changes : record.changes).except(*record.paper_trail_options[:skip].map(&:to_s))
+        @version_object_changes_cache ||= (RAILS_GTE_5_1 ? record.saved_changes : record.changes).except(*record.paper_trail_options[:skip].map(&:to_s)).presence
       end
 
       def cache_version_additional_objects_and_changes
         if paper_trail.respond_to?(:merge_metadata_into)
-          @version_additional_objects_and_changes_cache ||= paper_trail.merge_metadata_into({})
+          @version_additional_objects_and_changes_cache ||= paper_trail.merge_metadata_into({}).presence
         else
           data ={}
           @record = paper_trail.instance_variable_get(:@record)
@@ -156,7 +184,7 @@ module ActiveAdmin
             end
           end
           data.merge!(PaperTrail.request.controller_info || {})
-          @version_additional_objects_and_changes_cache ||= data
+          @version_additional_objects_and_changes_cache ||= data.presence
         end
       end
 
@@ -167,7 +195,7 @@ module ActiveAdmin
       end
 
       def generate_version!
-        if cache_version_object_changes.size > 0 or cache_version_additional_objects_and_changes.size > 0
+        if cache_version_object_changes&.size&.positive? || (cache_version_additional_objects_and_changes).except(*@record.paper_trail_options[:skip].map(&:to_sym)).compact&.size&.positive?
           data = {
             event: @event_for_paper_trail,
             object: cache_version_object.to_json,

@@ -3,7 +3,7 @@ ActiveAdmin.register ActiveAdmin::Audit::ContentVersion, as: 'ContentVersion' do
 
   actions :index, :show
 
-  filter :item_type, input_html: { class: 'chosen' }, as: :select
+  filter :item_versions
   filter :event, input_html: { class: 'chosen' }, as: :select
   filter :whodunnit, input_html: { class: 'chosen' }, as: :select,
                      collection: lambda {
@@ -13,8 +13,13 @@ ActiveAdmin.register ActiveAdmin::Audit::ContentVersion, as: 'ContentVersion' do
                      }
   filter :created_at
 
+  controller do
+    helper 'active_admin/versions'
+  end
+
   index do
-    id_column
+    actions
+    column :id
     column :item
     column :item_type
     column :event
@@ -26,7 +31,6 @@ ActiveAdmin.register ActiveAdmin::Audit::ContentVersion, as: 'ContentVersion' do
       version_attributes_diff(version.additional_objects_changes)
     end
     column :created_at
-    actions
   end
 
   show do |version|
