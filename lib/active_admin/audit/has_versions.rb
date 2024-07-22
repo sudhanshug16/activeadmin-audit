@@ -17,8 +17,8 @@ module ActiveAdmin
           end
 
           has_paper_trail options.merge( on: [], versions: { class_name: "ActiveAdmin::Audit::ContentVersion" }, meta: {
-            additional_objects: ->(record) { record.additional_objects_snapshot.presence&.to_json },
-            additional_objects_changes: ->(record) { record.additional_objects_snapshot_changes.presence&.to_json },
+            additional_objects: ->(record) { record.version_changes.present? ? record.additional_objects_snapshot.presence&.to_json : nil },
+            additional_objects_changes: ->(record) { record.version_changes.present? ? record.additional_objects_snapshot_changes.presence&.to_json : nil },
           })
 
           condition_proc = proc { |record| (options[:if] || proc { |_r| true }).call(record) && !(options[:unless] || proc { |_r| false }).call(record) }
@@ -97,6 +97,10 @@ module ActiveAdmin
         versions.reorder(created_at: :desc).limit(count).rewhere(item_type: self.class.name)
       end
 
+      def version_changes
+        (RAILS_GTE_5_1 ? saved_changes : changes).except(*paper_trail_options[:skip].map(&:to_s)).presence
+      end
+
       def additional_objects_snapshot_changes
         prev_version = (versions.size > 0) ? versions.last : latest_versions.first
 
@@ -155,7 +159,7 @@ module ActiveAdmin
 
       def cache_version_object_changes
         record = paper_trail.instance_variable_get(:@record)
-        @version_object_changes_cache ||= (RAILS_GTE_5_1 ? record.saved_changes : record.changes).except(*record.paper_trail_options[:skip].map(&:to_s)).presence
+        @version_object_changes_cache ||= record.version_changes
       end
 
       def cache_version_additional_objects_and_changes
