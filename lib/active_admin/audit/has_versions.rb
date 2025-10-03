@@ -94,7 +94,7 @@ module ActiveAdmin
       end
 
       def latest_versions(count = 5)
-        versions.reorder(created_at: :desc).limit(count).rewhere(item_type: self.class.name)
+        versions.limit(count).rewhere(item_type: self.class.name)
       end
 
       def version_changes
