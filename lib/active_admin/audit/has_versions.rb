@@ -90,7 +90,7 @@ module ActiveAdmin
         conditions = "OR #{conditions}" if conditions.present?
         ActiveAdmin::Audit::ContentVersion
           .where("(item_type = ? AND item_id = ?) #{conditions}", self.class.name, self.id)
-          .order(created_at: :desc)
+          .order(id: :desc)
       end
 
       def latest_versions(count = 5)
